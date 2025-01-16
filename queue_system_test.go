@@ -8,7 +8,8 @@ import (
 // TestQueueAndBankCounter 测试队列和银行柜台的功能
 func TestQueueAndBankCounter(t *testing.T) {
 	// 使用默认的日志记录器
-	logger := &DefaultLogger{t: t}
+	logger := &DefaultLogger{}
+	SetLogger(logger)
 
 	// 初始化排队队列
 	queue := NewQueue()
