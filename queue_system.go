@@ -100,13 +100,22 @@ func (q *Queue) ExpireTickets() {
 	}
 }
 
-// ResetTicketNumber 重置票号计数器，从0开始
-func (q *Queue) ResetTicketNumber() {
+// ResetTicketNumber 重置票号计数器，从0开始，仅当队列为空时才重置
+func (q *Queue) ResetTicketNumber() bool {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
+	if len(q.tickets) > 0 {
+		// 如果队列中还有客户，则不能重置票号
+		fmt.Println("Cannot reset ticket numbers, queue is not empty.")
+		return false
+	}
+
+	// 清空队列并重置票号计数器
 	q.nextTicketNum = 0
-	q.tickets = nil // 清空队列
+	q.tickets = nil
+	fmt.Println("Ticket numbers have been reset.")
+	return true
 }
 
 // GetQueueSize 返回当前排队中的人数
@@ -162,20 +171,27 @@ func main() {
 
 	// 发放一些票号
 	ticket1 := queue.IssueTicket("Alice")
-	queue.IssueTicket("Bob")
-	queue.IssueTicket("Charlie")
+	fmt.Printf("New ticket issued: %d for customer %s\n", ticket1.Number, ticket1.Name)
+
+	ticket2 := queue.IssueTicket("Bob")
+	fmt.Printf("New ticket issued: %d for customer %s\n", ticket2.Number, ticket2.Name)
+
+	ticket3 := queue.IssueTicket("Charlie")
+	fmt.Printf("New ticket issued: %d for customer %s\n", ticket3.Number, ticket3.Name)
 
 	// 显示当前排队人数
 	fmt.Printf("Current queue size: %d\n", queue.GetQueueSize())
 
-	// 取消票号
+	// 取消票号 ticket1
 	if queue.CancelTicket(ticket1.Number) {
 		fmt.Printf("Cancelled ticket %d\n", ticket1.Number)
 	}
 
-	// 重置票号计数器
-	queue.ResetTicketNumber()
-	fmt.Println("Ticket numbers have been reset.")
+	// 显示取消后的排队人数
+	fmt.Printf("Queue size after canceling ticket %d: %d\n", ticket1.Number, queue.GetQueueSize())
+
+	// 尝试重置票号，队列中还有客户，不会重置
+	queue.ResetTicketNumber() // 应该提示不能重置
 
 	// 发放新的票号（从0开始）
 	ticket4 := queue.IssueTicket("David")
@@ -188,9 +204,9 @@ func main() {
 	bankCounter.wg.Add(3)
 
 	// 服务客户
-	go bankCounter.ServeCustomer() // 服务 Bob
-	go bankCounter.ServeCustomer() // 服务 Charlie
-	go bankCounter.ServeCustomer() // 服务 Alice
+	go bankCounter.ServeCustomer() // 服务 Bob (ticket2)
+	go bankCounter.ServeCustomer() // 服务 Charlie (ticket3)
+	go bankCounter.ServeCustomer() // 服务 Alice (已取消)
 
 	// 定时检查过期票号
 	go func() {
@@ -202,4 +218,7 @@ func main() {
 
 	// 等待所有服务完成
 	bankCounter.wg.Wait()
+
+	// 尝试重置票号，队列为空，可以重置
+	queue.ResetTicketNumber() // 应该成功重置
 }
