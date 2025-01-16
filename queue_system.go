@@ -1,6 +1,7 @@
 package main
 
 import (
+	"container/heap"
 	"fmt"
 	"sync"
 	"time"
@@ -14,43 +15,50 @@ type Ticket struct {
 	Name      string
 	QueueTime time.Time // 客户排队的时间
 	IsExpired bool
+	Priority  uint32 // 用于优先队列的优先级
 }
 
-// Queue 代表排队的队列
+// Queue 代表排队的队列，使用优先队列（堆）实现
 type Queue struct {
-	tickets        []Ticket
+	tickets        []*Ticket
 	nextTicketNum  uint32 // 记录下一个生成的票号
 	mu             sync.Mutex
 	expirationTime time.Duration
+	ticketIndexMap map[uint32]int // 用于快速查找票号在队列中的位置
 }
 
 // NewQueue 创建一个空的排队队列
 func NewQueue(expirationTime time.Duration) *Queue {
 	return &Queue{
-		tickets:        make([]Ticket, 0),
-		nextTicketNum:  0, // 从0开始生成票号
+		tickets:        make([]*Ticket, 0),
+		nextTicketNum:  0,
 		expirationTime: expirationTime,
+		ticketIndexMap: make(map[uint32]int),
 	}
 }
 
 // IssueTicket 发放一个新的票号
-func (q *Queue) IssueTicket(name string) Ticket {
+func (q *Queue) IssueTicket(name string, priority uint32) *Ticket {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
 	// 生成一个新的票号
-	ticket := Ticket{
+	ticket := &Ticket{
 		Number:    q.nextTicketNum,
 		Name:      name,
 		QueueTime: time.Now(),
 		IsExpired: false,
+		Priority:  priority,
 	}
 
-	// 将票号加入队列
-	q.tickets = append(q.tickets, ticket)
+	// 将票号加入优先队列
+	heap.Push(q, ticket)
 
 	// 更新下一个生成的票号
 	q.nextTicketNum++
+
+	// 将票号的索引保存到映射中
+	q.ticketIndexMap[ticket.Number] = len(q.tickets) - 1
 
 	return ticket
 }
@@ -61,28 +69,38 @@ func (q *Queue) CancelTicket(ticketNumber uint32) bool {
 	defer q.mu.Unlock()
 
 	// 查找并取消该票号
-	for i, t := range q.tickets {
-		if t.Number == ticketNumber {
-			q.tickets = append(q.tickets[:i], q.tickets[i+1:]...)
-			return true
-		}
+	if index, exists := q.ticketIndexMap[ticketNumber]; exists {
+		// 用最后一个元素替换当前元素并移除最后一个元素
+		lastTicket := q.tickets[len(q.tickets)-1]
+		q.tickets[index] = lastTicket
+		q.ticketIndexMap[lastTicket.Number] = index
+
+		// 删除最后一个元素
+		q.tickets = q.tickets[:len(q.tickets)-1]
+		delete(q.ticketIndexMap, ticketNumber)
+
+		// 调整堆
+		heap.Fix(q, index)
+
+		return true
 	}
 
 	return false // 未找到票号
 }
 
 // ServeTicket 服务队列中的下一个客户
-func (q *Queue) ServeTicket() (Ticket, error) {
+func (q *Queue) ServeTicket() (*Ticket, error) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
 	// 取出队列中的第一个客户进行服务
 	if len(q.tickets) == 0 {
-		return Ticket{}, fmt.Errorf("no customers in queue")
+		return nil, fmt.Errorf("no customers in queue")
 	}
 
-	ticket := q.tickets[0]
-	q.tickets = q.tickets[1:] // 将该客户从队列中移除
+	// 获取优先队列中优先级最高的票
+	ticket := heap.Pop(q).(*Ticket)
+	delete(q.ticketIndexMap, ticket.Number) // 从映射中删除该票号的索引
 
 	return ticket, nil
 }
@@ -93,9 +111,9 @@ func (q *Queue) ExpireTickets() {
 	defer q.mu.Unlock()
 
 	// 过期队列中的票号
-	for i, t := range q.tickets {
+	for _, t := range q.tickets {
 		if time.Since(t.QueueTime) > q.expirationTime {
-			q.tickets[i].IsExpired = true
+			t.IsExpired = true
 		}
 	}
 }
@@ -124,6 +142,45 @@ func (q *Queue) GetQueueSize() int {
 	defer q.mu.Unlock()
 
 	return len(q.tickets)
+}
+
+// 获取指定票号的索引位置
+func (q *Queue) GetTicketIndex(ticketNumber uint32) (int, bool) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	index, exists := q.ticketIndexMap[ticketNumber]
+	return index, exists
+}
+
+// 定义堆实现（优先队列）
+func (q *Queue) Len() int {
+	return len(q.tickets)
+}
+
+func (q *Queue) Less(i, j int) bool {
+	return q.tickets[i].Priority > q.tickets[j].Priority // 优先级较高的在前
+}
+
+func (q *Queue) Swap(i, j int) {
+	q.tickets[i], q.tickets[j] = q.tickets[j], q.tickets[i]
+	q.ticketIndexMap[q.tickets[i].Number] = i
+	q.ticketIndexMap[q.tickets[j].Number] = j
+}
+
+func (q *Queue) Push(x interface{}) {
+	ticket := x.(*Ticket)
+	q.tickets = append(q.tickets, ticket)
+	q.ticketIndexMap[ticket.Number] = len(q.tickets) - 1
+}
+
+func (q *Queue) Pop() interface{} {
+	old := q.tickets
+	n := len(old)
+	ticket := old[n-1]
+	q.tickets = old[0 : n-1]
+	delete(q.ticketIndexMap, ticket.Number)
+	return ticket
 }
 
 // BankCounter 代表银行柜台的服务
@@ -170,17 +227,23 @@ func main() {
 	queue := NewQueue(ticketExpirationDuration)
 
 	// 发放一些票号
-	ticket1 := queue.IssueTicket("Alice")
+	ticket1 := queue.IssueTicket("Alice", 1)
 	fmt.Printf("New ticket issued: %d for customer %s\n", ticket1.Number, ticket1.Name)
 
-	ticket2 := queue.IssueTicket("Bob")
+	ticket2 := queue.IssueTicket("Bob", 3)
 	fmt.Printf("New ticket issued: %d for customer %s\n", ticket2.Number, ticket2.Name)
 
-	ticket3 := queue.IssueTicket("Charlie")
+	ticket3 := queue.IssueTicket("Charlie", 2)
 	fmt.Printf("New ticket issued: %d for customer %s\n", ticket3.Number, ticket3.Name)
 
 	// 显示当前排队人数
 	fmt.Printf("Current queue size: %d\n", queue.GetQueueSize())
+
+	// 获取指定票号的位置
+	index, found := queue.GetTicketIndex(ticket2.Number)
+	if found {
+		fmt.Printf("Ticket %d is at position %d in the queue\n", ticket2.Number, index)
+	}
 
 	// 取消票号 ticket1
 	if queue.CancelTicket(ticket1.Number) {
@@ -189,13 +252,6 @@ func main() {
 
 	// 显示取消后的排队人数
 	fmt.Printf("Queue size after canceling ticket %d: %d\n", ticket1.Number, queue.GetQueueSize())
-
-	// 尝试重置票号，队列中还有客户，不会重置
-	queue.ResetTicketNumber() // 应该提示不能重置
-
-	// 发放新的票号（从0开始）
-	ticket4 := queue.IssueTicket("David")
-	fmt.Printf("New ticket issued: %d for customer %s\n", ticket4.Number, ticket4.Name)
 
 	// 初始化银行柜台
 	bankCounter := NewBankCounter(queue)
@@ -206,7 +262,6 @@ func main() {
 	// 服务客户
 	go bankCounter.ServeCustomer() // 服务 Bob (ticket2)
 	go bankCounter.ServeCustomer() // 服务 Charlie (ticket3)
-	go bankCounter.ServeCustomer() // 服务 Alice (已取消)
 
 	// 定时检查过期票号
 	go func() {
