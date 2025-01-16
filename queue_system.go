@@ -1,4 +1,4 @@
-package main
+package quest_system
 
 import (
 	"container/heap"
@@ -198,45 +198,4 @@ func (bc *BankCounter) ServeCustomer() {
 	fmt.Printf("Serving customer %s with ticket number %d. Wait time: %v\n", ticket.Name, ticket.Number, waitTime)
 	time.Sleep(2 * time.Second) // 模拟服务时间
 	fmt.Printf("Finished serving customer %s with ticket number %d\n", ticket.Name, ticket.Number)
-}
-
-func main() {
-	// 初始化排队队列
-	queue := NewQueue()
-
-	// 发放一些票号
-	ticket1 := queue.IssueTicket("Alice", 1)
-	fmt.Printf("New ticket issued: %d for customer %s\n", ticket1.Number, ticket1.Name)
-
-	ticket2 := queue.IssueTicket("Bob", 3)
-	fmt.Printf("New ticket issued: %d for customer %s\n", ticket2.Number, ticket2.Name)
-
-	ticket3 := queue.IssueTicket("Charlie", 2)
-	fmt.Printf("New ticket issued: %d for customer %s\n", ticket3.Number, ticket3.Name)
-
-	// 发放相同优先级的票
-	ticket4 := queue.IssueTicket("David", 3)
-	fmt.Printf("New ticket issued: %d for customer %s\n", ticket4.Number, ticket4.Name)
-
-	// 取消票号 ticket1
-	if queue.CancelTicket(ticket1.Number) {
-		fmt.Printf("Cancelled ticket %d\n", ticket1.Number)
-	}
-
-	// 初始化银行柜台
-	bankCounter := NewBankCounter(queue)
-
-	// 模拟银行柜台并发服务
-	bankCounter.wg.Add(3)
-
-	// 服务客户
-	go bankCounter.ServeCustomer() // 服务 Bob (ticket2)
-	go bankCounter.ServeCustomer() // 服务 Charlie (ticket3)
-	go bankCounter.ServeCustomer() // 服务 David (ticket4)
-
-	// 等待所有服务完成
-	bankCounter.wg.Wait()
-
-	// 尝试重置票号，队列为空，可以重置
-	queue.ResetTicketNumber() // 应该成功重置
 }
