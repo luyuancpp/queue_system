@@ -99,7 +99,6 @@ func (q *Queue) ServeTicket() (*Ticket, error) {
 	// 取出队列中的第一个客户进行服务
 	for len(q.tickets) > 0 {
 		ticket := heap.Pop(q).(*Ticket)
-		delete(q.ticketIndexMap, ticket.Number)
 
 		// 如果票被取消，跳过此票
 		if ticket.IsCancelled {
@@ -107,7 +106,7 @@ func (q *Queue) ServeTicket() (*Ticket, error) {
 			continue
 		}
 
-		// 返回有效的票
+		// 直接返回有效的票，不再需要手动删除 ticketIndexMap 中的条目
 		return ticket, nil
 	}
 
