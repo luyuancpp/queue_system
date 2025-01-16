@@ -7,15 +7,12 @@ import (
 	"time"
 )
 
-const ticketExpirationDuration = 30 * time.Second // 票号有效期为30秒
-
 // Ticket 代表一个客户的票号
 type Ticket struct {
 	Number    uint32
 	Name      string
 	QueueTime time.Time // 客户排队的时间
-	IsExpired bool
-	Priority  uint32 // 用于优先队列的优先级
+	Priority  uint32    // 用于优先队列的优先级
 }
 
 // Queue 代表排队的队列，使用优先队列（堆）实现
@@ -23,16 +20,13 @@ type Queue struct {
 	tickets        []*Ticket
 	nextTicketNum  uint32 // 记录下一个生成的票号
 	mu             sync.Mutex
-	expirationTime time.Duration
 	ticketIndexMap map[uint32]int // 用于快速查找票号在队列中的位置
 }
 
-// NewQueue 创建一个空的排队队列
-func NewQueue(expirationTime time.Duration) *Queue {
+func NewQueue() *Queue {
 	return &Queue{
 		tickets:        make([]*Ticket, 0),
 		nextTicketNum:  0,
-		expirationTime: expirationTime,
 		ticketIndexMap: make(map[uint32]int),
 	}
 }
@@ -47,7 +41,6 @@ func (q *Queue) IssueTicket(name string, priority uint32) *Ticket {
 		Number:    q.nextTicketNum,
 		Name:      name,
 		QueueTime: time.Now(),
-		IsExpired: false,
 		Priority:  priority,
 	}
 
@@ -103,19 +96,6 @@ func (q *Queue) ServeTicket() (*Ticket, error) {
 	delete(q.ticketIndexMap, ticket.Number) // 从映射中删除该票号的索引
 
 	return ticket, nil
-}
-
-// ExpireTickets 检查并过期无效的票号
-func (q *Queue) ExpireTickets() {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-
-	// 过期队列中的票号
-	for _, t := range q.tickets {
-		if time.Since(t.QueueTime) > q.expirationTime {
-			t.IsExpired = true
-		}
-	}
 }
 
 // ResetTicketNumber 重置票号计数器，从0开始，仅当队列为空时才重置
@@ -207,12 +187,6 @@ func (bc *BankCounter) ServeCustomer() {
 		return
 	}
 
-	// 如果票号过期，跳过服务
-	if ticket.IsExpired {
-		fmt.Printf("Ticket %d has expired, skipping service\n", ticket.Number)
-		return
-	}
-
 	// 计算排队时间
 	waitTime := time.Since(ticket.QueueTime)
 
@@ -224,7 +198,7 @@ func (bc *BankCounter) ServeCustomer() {
 
 func main() {
 	// 初始化排队队列，票号有效期为30秒
-	queue := NewQueue(ticketExpirationDuration)
+	queue := NewQueue()
 
 	// 发放一些票号
 	ticket1 := queue.IssueTicket("Alice", 1)
@@ -257,19 +231,11 @@ func main() {
 	bankCounter := NewBankCounter(queue)
 
 	// 模拟银行柜台并发服务
-	bankCounter.wg.Add(3)
+	bankCounter.wg.Add(2)
 
 	// 服务客户
 	go bankCounter.ServeCustomer() // 服务 Bob (ticket2)
 	go bankCounter.ServeCustomer() // 服务 Charlie (ticket3)
-
-	// 定时检查过期票号
-	go func() {
-		for {
-			time.Sleep(5 * time.Second)
-			queue.ExpireTickets()
-		}
-	}()
 
 	// 等待所有服务完成
 	bankCounter.wg.Wait()
