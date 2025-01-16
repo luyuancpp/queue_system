@@ -1,35 +1,34 @@
 package quest_system
 
 import (
-	"fmt"
 	"testing"
 	"time"
 )
 
-// TestQueueAndBankCounter 测试队列与银行柜台的功能
+// TestQueueAndBankCounter 测试队列和银行柜台的功能
 func TestQueueAndBankCounter(t *testing.T) {
 	// 初始化排队队列
 	queue := NewQueue()
 
 	// 发放一些票号
-	ticket1 := queue.IssueTicket("Alice", 1)
-	t.Logf("New ticket issued: %d for customer %s", ticket1.Number, ticket1.Name)
+	ticketAlice := queue.IssueTicket("Alice", 1)
+	t.Logf("Issued ticket %d for customer %s", ticketAlice.Number, ticketAlice.Name)
 
-	ticket2 := queue.IssueTicket("Bob", 3)
-	t.Logf("New ticket issued: %d for customer %s", ticket2.Number, ticket2.Name)
+	ticketBob := queue.IssueTicket("Bob", 3)
+	t.Logf("Issued ticket %d for customer %s", ticketBob.Number, ticketBob.Name)
 
-	ticket3 := queue.IssueTicket("Charlie", 2)
-	t.Logf("New ticket issued: %d for customer %s", ticket3.Number, ticket3.Name)
+	ticketCharlie := queue.IssueTicket("Charlie", 2)
+	t.Logf("Issued ticket %d for customer %s", ticketCharlie.Number, ticketCharlie.Name)
 
 	// 发放相同优先级的票
-	ticket4 := queue.IssueTicket("David", 3)
-	t.Logf("New ticket issued: %d for customer %s", ticket4.Number, ticket4.Name)
+	ticketDavid := queue.IssueTicket("David", 3)
+	t.Logf("Issued ticket %d for customer %s", ticketDavid.Number, ticketDavid.Name)
 
-	// 取消票号 ticket1
-	if queue.CancelTicket(ticket1.Number) {
-		t.Logf("Cancelled ticket %d", ticket1.Number)
+	// 取消票号 ticketAlice
+	if queue.CancelTicket(ticketAlice.Number) {
+		t.Logf("Cancelled ticket %d", ticketAlice.Number)
 	} else {
-		t.Errorf("Failed to cancel ticket %d", ticket1.Number)
+		t.Errorf("Failed to cancel ticket %d", ticketAlice.Number)
 	}
 
 	// 初始化银行柜台
@@ -38,32 +37,32 @@ func TestQueueAndBankCounter(t *testing.T) {
 	// 模拟银行柜台并发服务
 	bankCounter.wg.Add(3)
 
-	mockFunc := func(ticket *Ticket) error { // 模拟服务过程
+	// 模拟服务过程
+	serveCustomer := func(ticket *Ticket) error {
 		// 计算排队时间
 		waitTime := time.Since(ticket.QueueTime)
 
-		fmt.Printf("Serving customer %s with ticket number %d. Wait time: %v\n", ticket.Name, ticket.Number, waitTime)
-		time.Sleep(2 * time.Second) // 模拟服务时间
-		fmt.Printf("Finished serving customer %s with ticket number %d\n", ticket.Name, ticket.Number)
+		// 打印服务信息
+		t.Logf("Serving customer %s with ticket number %d. Wait time: %v", ticket.Name, ticket.Number, waitTime)
 
 		return nil
 	}
 
-	// 服务客户
+	// 并发服务客户
 	go func() {
-		bankCounter.ServeCustomer(mockFunc)
+		bankCounter.ServeCustomer(serveCustomer)
 	}()
 	go func() {
-		bankCounter.ServeCustomer(mockFunc)
+		bankCounter.ServeCustomer(serveCustomer)
 	}()
 	go func() {
-		bankCounter.ServeCustomer(mockFunc)
+		bankCounter.ServeCustomer(serveCustomer)
 	}()
 
 	// 等待所有服务完成
 	bankCounter.wg.Wait()
 
-	// 尝试重置票号，队列为空，可以重置
+	// 尝试重置票号
 	if !queue.ResetTicketNumber() {
 		t.Errorf("Failed to reset ticket numbers")
 	}

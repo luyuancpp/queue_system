@@ -74,6 +74,23 @@ func (q *Queue) CancelTicket(ticketNumber uint32) bool {
 	return false // 未找到票号
 }
 
+// IsValidTicket 检查票是否有效
+func (q *Queue) IsValidTicket(ticketNumber uint32) bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	// 查找票号在队列中的位置
+	index, exists := q.ticketIndexMap[ticketNumber]
+	if !exists {
+		// 如果票号不存在，表示该票无效
+		return false
+	}
+
+	// 检查票是否被取消
+	ticket := q.tickets[index]
+	return !ticket.IsCancelled
+}
+
 // ServeTicket 服务队列中的下一个客户
 func (q *Queue) ServeTicket() (*Ticket, error) {
 	q.mu.Lock()
@@ -198,14 +215,12 @@ func (bc *BankCounter) ServeCustomer(serveFn ServeFunc) {
 	}
 
 	// 启动一个新的 goroutine 来模拟服务过程
-	go func(ticket *Ticket) {
-		defer bc.wg.Done() // 完成后减少计数器
+	defer bc.wg.Done() // 完成后减少计数器
 
-		// 调用外部传入的服务函数
-		if err := serveFn(ticket); err != nil {
-			fmt.Printf("Error serving customer %s with ticket number %d: %v\n", ticket.Name, ticket.Number, err)
-		} else {
-			fmt.Printf("Finished serving customer %s with ticket number %d\n", ticket.Name, ticket.Number)
-		}
-	}(ticket)
+	// 调用外部传入的服务函数
+	if err := serveFn(ticket); err != nil {
+		fmt.Printf("Error serving customer %s with ticket number %d: %v\n", ticket.Name, ticket.Number, err)
+	} else {
+		fmt.Printf("Finished serving customer %s with ticket number %d\n", ticket.Name, ticket.Number)
+	}
 }
