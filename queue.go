@@ -103,7 +103,7 @@ func (q *Queue) ServeTicket() (*Ticket, error) {
 
 		// 如果票被取消，跳过此票
 		if ticket.IsCancelled {
-			fmt.Printf("Ticket %d is cancelled, skipping\n", ticket.Number)
+			GetLogger().Info("Ticket %d is cancelled, skipping\n", ticket.Number)
 			continue
 		}
 
@@ -124,7 +124,7 @@ func (q *Queue) ResetTicketNumber() bool {
 	for _, ticket := range q.tickets {
 		if !ticket.IsCancelled {
 			// 如果队列中有未取消的票，则不能重置
-			fmt.Println("Cannot reset ticket numbers, there are still active tickets.")
+			GetLogger().Info("Cannot reset ticket numbers, there are still active tickets.")
 			return false
 		}
 	}
@@ -133,7 +133,7 @@ func (q *Queue) ResetTicketNumber() bool {
 	q.nextTicketNum = 0
 	q.tickets = nil
 	q.ticketIndexMap = make(map[uint32]int) // 重置索引映射
-	fmt.Println("Ticket numbers have been reset.")
+	GetLogger().Info("Ticket numbers have been reset.")
 	return true
 }
 
@@ -187,40 +187,4 @@ func (q *Queue) Pop() interface{} {
 	q.tickets = old[0 : n-1]
 	delete(q.ticketIndexMap, ticket.Number)
 	return ticket
-}
-
-// 定义服务函数类型
-type ServeFunc func(ticket *Ticket) error
-
-// BankCounter 代表银行柜台的服务
-type BankCounter struct {
-	queue *Queue
-	wg    sync.WaitGroup
-}
-
-// NewBankCounter 创建一个新的银行柜台
-func NewBankCounter(queue *Queue) *BankCounter {
-	return &BankCounter{
-		queue: queue,
-	}
-}
-
-// ServeCustomer 服务客户，传入外部定义的服务函数
-func (bc *BankCounter) ServeCustomer(serveFn ServeFunc) {
-	// 获取一个客户的票号
-	ticket, err := bc.queue.ServeTicket()
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	// 启动一个新的 goroutine 来模拟服务过程
-	defer bc.wg.Done() // 完成后减少计数器
-
-	// 调用外部传入的服务函数
-	if err := serveFn(ticket); err != nil {
-		fmt.Printf("Error serving customer %s with ticket number %d: %v\n", ticket.Name, ticket.Number, err)
-	} else {
-		fmt.Printf("Finished serving customer %s with ticket number %d\n", ticket.Name, ticket.Number)
-	}
 }
