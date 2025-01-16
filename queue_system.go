@@ -9,10 +9,11 @@ import (
 
 // Ticket 代表一个客户的票号
 type Ticket struct {
-	Number    uint32
-	Name      string
-	QueueTime time.Time // 客户排队的时间
-	Priority  uint32    // 用于优先队列的优先级
+	Number      uint32
+	Name        string
+	QueueTime   time.Time // 客户排队的时间
+	Priority    uint32    // 用于优先队列的优先级
+	IsCancelled bool      // 标记票是否被取消
 }
 
 // Queue 代表排队的队列，使用优先队列（堆）实现
@@ -63,18 +64,8 @@ func (q *Queue) CancelTicket(ticketNumber uint32) bool {
 
 	// 查找并取消该票号
 	if index, exists := q.ticketIndexMap[ticketNumber]; exists {
-		// 用最后一个元素替换当前元素并移除最后一个元素
-		lastTicket := q.tickets[len(q.tickets)-1]
-		q.tickets[index] = lastTicket
-		q.ticketIndexMap[lastTicket.Number] = index
-
-		// 删除最后一个元素
-		q.tickets = q.tickets[:len(q.tickets)-1]
-		delete(q.ticketIndexMap, ticketNumber)
-
-		// 调整堆
-		heap.Fix(q, index)
-
+		q.tickets[index].IsCancelled = true // 标记为取消
+		// 不需要调整堆，取消标记后，堆会在取票时自动跳过已取消的票
 		return true
 	}
 
@@ -87,15 +78,21 @@ func (q *Queue) ServeTicket() (*Ticket, error) {
 	defer q.mu.Unlock()
 
 	// 取出队列中的第一个客户进行服务
-	if len(q.tickets) == 0 {
-		return nil, fmt.Errorf("no customers in queue")
+	for len(q.tickets) > 0 {
+		ticket := heap.Pop(q).(*Ticket)
+		delete(q.ticketIndexMap, ticket.Number)
+
+		// 如果票被取消，跳过此票
+		if ticket.IsCancelled {
+			fmt.Printf("Ticket %d is cancelled, skipping\n", ticket.Number)
+			continue
+		}
+
+		// 返回有效的票
+		return ticket, nil
 	}
 
-	// 获取优先队列中优先级最高的票
-	ticket := heap.Pop(q).(*Ticket)
-	delete(q.ticketIndexMap, ticket.Number) // 从映射中删除该票号的索引
-
-	return ticket, nil
+	return nil, fmt.Errorf("no customers in queue")
 }
 
 // ResetTicketNumber 重置票号计数器，从0开始，仅当队列为空时才重置
@@ -210,32 +207,21 @@ func main() {
 	ticket3 := queue.IssueTicket("Charlie", 2)
 	fmt.Printf("New ticket issued: %d for customer %s\n", ticket3.Number, ticket3.Name)
 
-	// 显示当前排队人数
-	fmt.Printf("Current queue size: %d\n", queue.GetQueueSize())
-
-	// 获取指定票号的位置
-	index, found := queue.GetTicketIndex(ticket2.Number)
-	if found {
-		fmt.Printf("Ticket %d is at position %d in the queue\n", ticket2.Number, index)
-	}
-
 	// 取消票号 ticket1
 	if queue.CancelTicket(ticket1.Number) {
 		fmt.Printf("Cancelled ticket %d\n", ticket1.Number)
 	}
 
-	// 显示取消后的排队人数
-	fmt.Printf("Queue size after canceling ticket %d: %d\n", ticket1.Number, queue.GetQueueSize())
-
 	// 初始化银行柜台
 	bankCounter := NewBankCounter(queue)
 
 	// 模拟银行柜台并发服务
-	bankCounter.wg.Add(2)
+	bankCounter.wg.Add(3)
 
 	// 服务客户
 	go bankCounter.ServeCustomer() // 服务 Bob (ticket2)
 	go bankCounter.ServeCustomer() // 服务 Charlie (ticket3)
+	go bankCounter.ServeCustomer() // 服务 Alice (已取消)
 
 	// 等待所有服务完成
 	bankCounter.wg.Wait()
