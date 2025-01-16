@@ -13,6 +13,7 @@ type Ticket struct {
 	Name        string
 	QueueTime   time.Time // 客户排队的时间
 	Priority    uint32    // 用于优先队列的优先级
+	CreatedAt   time.Time // 记录票的创建时间，用于处理优先级相同的情况
 	IsCancelled bool      // 标记票是否被取消
 }
 
@@ -43,6 +44,7 @@ func (q *Queue) IssueTicket(name string, priority uint32) *Ticket {
 		Name:      name,
 		QueueTime: time.Now(),
 		Priority:  priority,
+		CreatedAt: time.Now(), // 记录创建时间
 	}
 
 	// 将票号加入优先队列
@@ -135,7 +137,12 @@ func (q *Queue) Len() int {
 	return len(q.tickets)
 }
 
+// 修改比较规则，首先按优先级排序，优先级相同则按创建时间排序
 func (q *Queue) Less(i, j int) bool {
+	if q.tickets[i].Priority == q.tickets[j].Priority {
+		// 如果优先级相同，按创建时间排序
+		return q.tickets[i].CreatedAt.Before(q.tickets[j].CreatedAt)
+	}
 	return q.tickets[i].Priority > q.tickets[j].Priority // 优先级较高的在前
 }
 
@@ -194,7 +201,7 @@ func (bc *BankCounter) ServeCustomer() {
 }
 
 func main() {
-	// 初始化排队队列，票号有效期为30秒
+	// 初始化排队队列
 	queue := NewQueue()
 
 	// 发放一些票号
@@ -206,6 +213,10 @@ func main() {
 
 	ticket3 := queue.IssueTicket("Charlie", 2)
 	fmt.Printf("New ticket issued: %d for customer %s\n", ticket3.Number, ticket3.Name)
+
+	// 发放相同优先级的票
+	ticket4 := queue.IssueTicket("David", 3)
+	fmt.Printf("New ticket issued: %d for customer %s\n", ticket4.Number, ticket4.Name)
 
 	// 取消票号 ticket1
 	if queue.CancelTicket(ticket1.Number) {
@@ -221,7 +232,7 @@ func main() {
 	// 服务客户
 	go bankCounter.ServeCustomer() // 服务 Bob (ticket2)
 	go bankCounter.ServeCustomer() // 服务 Charlie (ticket3)
-	go bankCounter.ServeCustomer() // 服务 Alice (已取消)
+	go bankCounter.ServeCustomer() // 服务 David (ticket4)
 
 	// 等待所有服务完成
 	bankCounter.wg.Wait()
