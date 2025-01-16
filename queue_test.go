@@ -1,6 +1,7 @@
 package quest_system
 
 import (
+	"math/rand"
 	"testing"
 	"time"
 )
@@ -69,5 +70,57 @@ func TestQueueAndBankCounter(t *testing.T) {
 	// 尝试重置票号
 	if !queue.ResetTicketNumber() {
 		logger.Error("Failed to reset ticket numbers")
+	}
+}
+
+// 测试 ticketIndexMap 和 tickets 的一致性，并随机取消一些票
+func TestTicketIndexMapConsistencyWithCancellation(t *testing.T) {
+	// 自定义票的数量，默认是10万张
+	numTickets := 100000
+	q := NewQueue()
+
+	// 发放 numTickets 张票
+	for i := 0; i < numTickets; i++ {
+		q.IssueTicket("Customer", uint32(i))
+	}
+
+	// 随机取消一些票，假设取消总数为总票数的 10%
+	cancelCount := numTickets / 10
+	rand.Seed(time.Now().UnixNano()) // 初始化随机数种子
+
+	// 随机取消票
+	for i := 0; i < cancelCount; i++ {
+		// 随机选择一个票号并取消
+		randomTicketIndex := rand.Intn(numTickets)
+		ticket := q.tickets[randomTicketIndex]
+		q.CancelTicket(ticket.Number)
+	}
+
+	// 验证 ticketIndexMap 和 tickets 的一致性
+	checkTicketConsistency(t, q)
+}
+
+// 检查 ticketIndexMap 和 tickets 的一致性
+func checkTicketConsistency(t *testing.T, q *Queue) {
+	// 确保 ticketIndexMap 中每个票号都能正确指向 tickets 数组中的位置
+	for i, ticket := range q.tickets {
+		if ticket.IsCancelled {
+			// 如果票被取消，跳过此票的验证
+			continue
+		}
+		if index, exists := q.ticketIndexMap[ticket.Number]; exists {
+			if index != i {
+				t.Errorf("Ticket %d in ticketIndexMap points to wrong index: expected %d, got %d", ticket.Number, i, index)
+			}
+		} else {
+			t.Errorf("Ticket %d is missing from ticketIndexMap", ticket.Number)
+		}
+	}
+
+	// 确保 ticketIndexMap 中的每个索引都有对应的票号
+	for ticketNumber, index := range q.ticketIndexMap {
+		if index >= len(q.tickets) || q.tickets[index].Number != ticketNumber {
+			t.Errorf("ticketIndexMap has incorrect mapping: ticketNumber %d maps to index %d, but tickets[%d].Number = %d", ticketNumber, index, index, q.tickets[index].Number)
+		}
 	}
 }
