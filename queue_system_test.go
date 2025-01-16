@@ -1,7 +1,9 @@
 package quest_system
 
 import (
+	"fmt"
 	"testing"
+	"time"
 )
 
 // TestQueueAndBankCounter 测试队列与银行柜台的功能
@@ -36,15 +38,26 @@ func TestQueueAndBankCounter(t *testing.T) {
 	// 模拟银行柜台并发服务
 	bankCounter.wg.Add(3)
 
+	mockFunc := func(ticket *Ticket) error { // 模拟服务过程
+		// 计算排队时间
+		waitTime := time.Since(ticket.QueueTime)
+
+		fmt.Printf("Serving customer %s with ticket number %d. Wait time: %v\n", ticket.Name, ticket.Number, waitTime)
+		time.Sleep(2 * time.Second) // 模拟服务时间
+		fmt.Printf("Finished serving customer %s with ticket number %d\n", ticket.Name, ticket.Number)
+
+		return nil
+	}
+
 	// 服务客户
 	go func() {
-		bankCounter.ServeCustomer()
+		bankCounter.ServeCustomer(mockFunc)
 	}()
 	go func() {
-		bankCounter.ServeCustomer()
+		bankCounter.ServeCustomer(mockFunc)
 	}()
 	go func() {
-		bankCounter.ServeCustomer()
+		bankCounter.ServeCustomer(mockFunc)
 	}()
 
 	// 等待所有服务完成

@@ -98,19 +98,24 @@ func (q *Queue) ServeTicket() (*Ticket, error) {
 }
 
 // ResetTicketNumber 重置票号计数器，从0开始，仅当队列为空时才重置
+// ResetTicketNumber 重置票号计数器，从0开始，仅当队列为空或所有票都被取消时才重置
 func (q *Queue) ResetTicketNumber() bool {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
-	if len(q.tickets) > 0 {
-		// 如果队列中还有客户，则不能重置票号
-		fmt.Println("Cannot reset ticket numbers, queue is not empty.")
-		return false
+	// 检查队列中是否有有效的票
+	for _, ticket := range q.tickets {
+		if !ticket.IsCancelled {
+			// 如果队列中有未取消的票，则不能重置
+			fmt.Println("Cannot reset ticket numbers, there are still active tickets.")
+			return false
+		}
 	}
 
 	// 清空队列并重置票号计数器
 	q.nextTicketNum = 0
 	q.tickets = nil
+	q.ticketIndexMap = make(map[uint32]int) // 重置索引映射
 	fmt.Println("Ticket numbers have been reset.")
 	return true
 }
@@ -167,6 +172,9 @@ func (q *Queue) Pop() interface{} {
 	return ticket
 }
 
+// 定义服务函数类型
+type ServeFunc func(ticket *Ticket) error
+
 // BankCounter 代表银行柜台的服务
 type BankCounter struct {
 	queue *Queue
@@ -180,10 +188,8 @@ func NewBankCounter(queue *Queue) *BankCounter {
 	}
 }
 
-// ServeCustomer 服务客户
-func (bc *BankCounter) ServeCustomer() {
-	defer bc.wg.Done()
-
+// ServeCustomer 服务客户，传入外部定义的服务函数
+func (bc *BankCounter) ServeCustomer(serveFn ServeFunc) {
 	// 获取一个客户的票号
 	ticket, err := bc.queue.ServeTicket()
 	if err != nil {
@@ -191,11 +197,15 @@ func (bc *BankCounter) ServeCustomer() {
 		return
 	}
 
-	// 计算排队时间
-	waitTime := time.Since(ticket.QueueTime)
+	// 启动一个新的 goroutine 来模拟服务过程
+	go func(ticket *Ticket) {
+		defer bc.wg.Done() // 完成后减少计数器
 
-	// 模拟服务过程
-	fmt.Printf("Serving customer %s with ticket number %d. Wait time: %v\n", ticket.Name, ticket.Number, waitTime)
-	time.Sleep(2 * time.Second) // 模拟服务时间
-	fmt.Printf("Finished serving customer %s with ticket number %d\n", ticket.Name, ticket.Number)
+		// 调用外部传入的服务函数
+		if err := serveFn(ticket); err != nil {
+			fmt.Printf("Error serving customer %s with ticket number %d: %v\n", ticket.Name, ticket.Number, err)
+		} else {
+			fmt.Printf("Finished serving customer %s with ticket number %d\n", ticket.Name, ticket.Number)
+		}
+	}(ticket)
 }
