@@ -7,28 +7,31 @@ import (
 
 // TestQueueAndBankCounter 测试队列和银行柜台的功能
 func TestQueueAndBankCounter(t *testing.T) {
+	// 使用默认的日志记录器
+	logger := &DefaultLogger{t: t}
+
 	// 初始化排队队列
 	queue := NewQueue()
 
 	// 发放一些票号
 	ticketAlice := queue.IssueTicket("Alice", 1)
-	t.Logf("Issued ticket %d for customer %s", ticketAlice.Number, ticketAlice.Name)
+	logger.Info("Issued ticket %d for customer %s", ticketAlice.Number, ticketAlice.Name)
 
 	ticketBob := queue.IssueTicket("Bob", 3)
-	t.Logf("Issued ticket %d for customer %s", ticketBob.Number, ticketBob.Name)
+	logger.Info("Issued ticket %d for customer %s", ticketBob.Number, ticketBob.Name)
 
 	ticketCharlie := queue.IssueTicket("Charlie", 2)
-	t.Logf("Issued ticket %d for customer %s", ticketCharlie.Number, ticketCharlie.Name)
+	logger.Info("Issued ticket %d for customer %s", ticketCharlie.Number, ticketCharlie.Name)
 
 	// 发放相同优先级的票
 	ticketDavid := queue.IssueTicket("David", 3)
-	t.Logf("Issued ticket %d for customer %s", ticketDavid.Number, ticketDavid.Name)
+	logger.Info("Issued ticket %d for customer %s", ticketDavid.Number, ticketDavid.Name)
 
 	// 取消票号 ticketAlice
 	if queue.CancelTicket(ticketAlice.Number) {
-		t.Logf("Cancelled ticket %d", ticketAlice.Number)
+		logger.Info("Cancelled ticket %d", ticketAlice.Number)
 	} else {
-		t.Errorf("Failed to cancel ticket %d", ticketAlice.Number)
+		logger.Error("Failed to cancel ticket %d", ticketAlice.Number)
 	}
 
 	// 初始化银行柜台
@@ -43,7 +46,7 @@ func TestQueueAndBankCounter(t *testing.T) {
 		waitTime := time.Since(ticket.QueueTime)
 
 		// 打印服务信息
-		t.Logf("Serving customer %s with ticket number %d. Wait time: %v", ticket.Name, ticket.Number, waitTime)
+		logger.Info("Serving customer %s with ticket number %d. Wait time: %v", ticket.Name, ticket.Number, waitTime)
 
 		return nil
 	}
@@ -64,6 +67,6 @@ func TestQueueAndBankCounter(t *testing.T) {
 
 	// 尝试重置票号
 	if !queue.ResetTicketNumber() {
-		t.Errorf("Failed to reset ticket numbers")
+		logger.Error("Failed to reset ticket numbers")
 	}
 }
