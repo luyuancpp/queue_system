@@ -10,7 +10,7 @@ const ticketExpirationDuration = 30 * time.Second // 票号有效期为30秒
 
 // Ticket 代表一个客户的票号
 type Ticket struct {
-	Number    int
+	Number    uint32
 	Name      string
 	QueueTime time.Time // 客户排队的时间
 	IsExpired bool
@@ -19,7 +19,7 @@ type Ticket struct {
 // Queue 代表排队的队列
 type Queue struct {
 	tickets        []Ticket
-	nextTicketNum  int // 记录下一个生成的票号
+	nextTicketNum  uint32 // 记录下一个生成的票号
 	mu             sync.Mutex
 	expirationTime time.Duration
 }
@@ -56,7 +56,7 @@ func (q *Queue) IssueTicket(name string) Ticket {
 }
 
 // CancelTicket 取消指定票号的客户
-func (q *Queue) CancelTicket(ticketNumber int) bool {
+func (q *Queue) CancelTicket(ticketNumber uint32) bool {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
