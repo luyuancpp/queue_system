@@ -53,9 +53,6 @@ func (q *Queue) IssueTicket(name string, priority uint32) *Ticket {
 	// 更新下一个生成的票号
 	q.nextTicketNum++
 
-	// 将票号的索引保存到映射中
-	q.ticketIndexMap[ticket.Number] = len(q.tickets) - 1
-
 	return ticket
 }
 

@@ -76,7 +76,7 @@ func TestQueueAndBankCounter(t *testing.T) {
 // 测试 ticketIndexMap 和 tickets 的一致性，并随机取消一些票
 func TestTicketIndexMapConsistencyWithCancellation(t *testing.T) {
 	// 自定义票的数量，默认是10万张
-	numTickets := 100000
+	numTickets := 10000000
 	q := NewQueue()
 
 	// 发放 numTickets 张票
